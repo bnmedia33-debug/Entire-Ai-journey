@@ -1,0 +1,5 @@
+{
+  "name": "AI Tutor Chatbot for Students",
+  "description": "A comprehensive AI-powered tutoring system for students with subject-specific support, chat history, and RAG-based knowledge retrieval.",
+  "requestFramePermissions": []
+}
