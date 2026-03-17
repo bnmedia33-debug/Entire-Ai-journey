@@ -29,17 +29,22 @@ export default function Auth({ onAuth }: AuthProps) {
         body: JSON.stringify(body),
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Something went wrong");
-      }
-
-      if (isLogin) {
-        onAuth(data.token, data.username);
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || "Something went wrong");
+        }
+        if (isLogin) {
+          onAuth(data.token, data.username);
+        } else {
+          setIsLogin(true);
+          setError("Registration successful! Please login.");
+        }
       } else {
-        setIsLogin(true);
-        setError("Registration successful! Please login.");
+        const text = await res.text();
+        console.error("Non-JSON response received:", text);
+        throw new Error(`Server returned an unexpected response (Status: ${res.status}). Please check if the backend is running.`);
       }
     } catch (err: any) {
       setError(err.message);

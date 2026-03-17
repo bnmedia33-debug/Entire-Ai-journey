@@ -16,8 +16,21 @@ const app = express();
 const PORT = 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "ai-tutor-secret-key";
 
+// Logging Middleware
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
+
 // Initialize Database
-const db = new Database("tutor.db");
+let db: Database.Database;
+try {
+  db = new Database("tutor.db");
+  console.log("Database initialized successfully");
+} catch (err) {
+  console.error("Failed to initialize database:", err);
+  process.exit(1);
+}
 
 // Database Schema
 db.exec(`
@@ -80,14 +93,21 @@ const authenticateToken = (req: any, res: any, next: any) => {
 
 // --- API Routes ---
 
+// Health Check
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
 // Registration
 app.post("/api/auth/register", async (req, res) => {
   const { username, password, email } = req.body;
+  console.log(`Register attempt: ${username}`);
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
     const info = db.prepare("INSERT INTO users (username, password, email) VALUES (?, ?, ?)").run(username, hashedPassword, email);
     res.status(201).json({ message: "User registered successfully", userId: info.lastInsertRowid });
   } catch (error: any) {
+    console.error("Registration error:", error);
     res.status(400).json({ error: error.message });
   }
 });
@@ -95,14 +115,20 @@ app.post("/api/auth/register", async (req, res) => {
 // Login
 app.post("/api/auth/login", async (req, res) => {
   const { username, password } = req.body;
-  const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as any;
+  console.log(`Login attempt: ${username}`);
+  try {
+    const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as any;
 
-  if (!user || !(await bcrypt.compare(password, user.password))) {
-    return res.status(401).json({ error: "Invalid credentials" });
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET);
+    res.json({ token, username: user.username });
+  } catch (error: any) {
+    console.error("Login error:", error);
+    res.status(500).json({ error: "Internal server error during login" });
   }
-
-  const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET);
-  res.json({ token, username: user.username });
 });
 
 // Get Chat History
@@ -164,8 +190,10 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running on http://0.0.0.0:${PORT}`);
   });
 }
 
-startServer();
+startServer().catch(err => {
+  console.error("CRITICAL: Failed to start server:", err);
+});
