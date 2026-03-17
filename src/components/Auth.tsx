@@ -44,7 +44,14 @@ export default function Auth({ onAuth }: AuthProps) {
       } else {
         const text = await res.text();
         console.error("Non-JSON response received:", text);
-        throw new Error(`Server returned an unexpected response (Status: ${res.status}). Please check if the backend is running.`);
+        let errorMessage = `Server returned an unexpected response (Status: ${res.status}).`;
+        if (res.status === 404) {
+          errorMessage += " The requested API endpoint was not found. Please ensure the backend routes are correctly configured.";
+        }
+        if (text.length < 200) {
+          errorMessage += ` Response: ${text}`;
+        }
+        throw new Error(errorMessage);
       }
     } catch (err: any) {
       setError(err.message);

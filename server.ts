@@ -92,17 +92,21 @@ const authenticateToken = (req: any, res: any, next: any) => {
 };
 
 // --- API Routes ---
+const apiRouter = express.Router();
 
 // Health Check
-app.get("/api/health", (req, res) => {
+apiRouter.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
 // Registration
-app.post("/api/auth/register", async (req, res) => {
+apiRouter.post("/auth/register", async (req, res) => {
   const { username, password, email } = req.body;
   console.log(`Register attempt: ${username}`);
   try {
+    if (!username || !password || !email) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
     const hashedPassword = await bcrypt.hash(password, 10);
     const info = db.prepare("INSERT INTO users (username, password, email) VALUES (?, ?, ?)").run(username, hashedPassword, email);
     res.status(201).json({ message: "User registered successfully", userId: info.lastInsertRowid });
@@ -113,10 +117,13 @@ app.post("/api/auth/register", async (req, res) => {
 });
 
 // Login
-app.post("/api/auth/login", async (req, res) => {
+apiRouter.post("/auth/login", async (req, res) => {
   const { username, password } = req.body;
   console.log(`Login attempt: ${username}`);
   try {
+    if (!username || !password) {
+      return res.status(400).json({ error: "Missing username or password" });
+    }
     const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as any;
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
@@ -132,13 +139,18 @@ app.post("/api/auth/login", async (req, res) => {
 });
 
 // Get Chat History
-app.get("/api/chat/history", authenticateToken, (req: any, res) => {
-  const history = db.prepare("SELECT * FROM chat_history WHERE user_id = ? ORDER BY timestamp ASC").all(req.user.id);
-  res.json(history);
+apiRouter.get("/chat/history", authenticateToken, (req: any, res) => {
+  try {
+    const history = db.prepare("SELECT * FROM chat_history WHERE user_id = ? ORDER BY timestamp ASC").all(req.user.id);
+    res.json(history);
+  } catch (error: any) {
+    console.error("History fetch error:", error);
+    res.status(500).json({ error: "Failed to fetch chat history" });
+  }
 });
 
 // Prepare Chat (Save user message and get RAG context)
-app.post("/api/chat/prepare", authenticateToken, (req: any, res) => {
+apiRouter.post("/chat/prepare", authenticateToken, (req: any, res) => {
   const { message, subject } = req.body;
   const userId = req.user.id;
 
@@ -160,7 +172,7 @@ app.post("/api/chat/prepare", authenticateToken, (req: any, res) => {
 });
 
 // Save AI Response
-app.post("/api/chat/save", authenticateToken, (req: any, res) => {
+apiRouter.post("/chat/save", authenticateToken, (req: any, res) => {
   const { response, subject } = req.body;
   const userId = req.user.id;
 
@@ -171,6 +183,14 @@ app.post("/api/chat/save", authenticateToken, (req: any, res) => {
     console.error("Save Chat Error:", error);
     res.status(500).json({ error: "Failed to save chat" });
   }
+});
+
+// Mount API router
+app.use("/api", apiRouter);
+
+// Handle 404 for API routes specifically
+app.use("/api/*", (req, res) => {
+  res.status(404).json({ error: `API route not found: ${req.originalUrl}` });
 });
 
 // --- Vite Integration ---
@@ -191,6 +211,12 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
+    console.log("Registered API routes:");
+    apiRouter.stack.forEach((r) => {
+      if (r.route && r.route.path) {
+        console.log(`${Object.keys(r.route.methods).join(",").toUpperCase()} /api${r.route.path}`);
+      }
+    });
   });
 }
 
