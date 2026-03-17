@@ -13,13 +13,31 @@ export default function Auth({ onAuth }: AuthProps) {
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [apiStatus, setApiStatus] = useState<"checking" | "up" | "down">("checking");
+
+  useEffect(() => {
+    const checkHealth = async () => {
+      try {
+        const res = await fetch(`${window.location.origin}/api/health`);
+        if (res.ok) {
+          setApiStatus("up");
+        } else {
+          setApiStatus("down");
+        }
+      } catch (err) {
+        setApiStatus("down");
+      }
+    };
+    checkHealth();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
-    const endpoint = isLogin ? "/api/auth/login" : "/api/auth/register";
+    const baseUrl = window.location.origin;
+    const endpoint = isLogin ? `${baseUrl}/api/auth/login` : `${baseUrl}/api/auth/register`;
     const body = isLogin ? { username, password } : { username, password, email };
 
     try {
@@ -74,6 +92,11 @@ export default function Auth({ onAuth }: AuthProps) {
           <p className="text-zinc-500">
             {isLogin ? "Login to access your AI Tutor" : "Join our learning community today"}
           </p>
+          {apiStatus === "down" && (
+            <p className="mt-2 text-xs text-red-500 font-semibold animate-pulse">
+              âš ï¸ Backend API appears to be offline.
+            </p>
+          )}
         </div>
 
         {error && (

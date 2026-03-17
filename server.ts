@@ -6,6 +6,7 @@ import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
+import cors from "cors";
 
 dotenv.config();
 
@@ -16,13 +17,17 @@ const app = express();
 const PORT = 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "ai-tutor-secret-key";
 
-// Logging Middleware
+// 1. Basic Middlewares
+app.use(cors());
+app.use(express.json());
+
+// 2. Request Logging (at the very top)
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   next();
 });
 
-// Initialize Database
+// 3. Initialize Database
 let db: Database.Database;
 try {
   db = new Database("tutor.db");
@@ -75,7 +80,52 @@ if (checkSeed.count === 0) {
   seedData.forEach(item => insert.run(item.subject, item.topic, item.content));
 }
 
-app.use(express.json());
+// 4. API Routes (Directly on app, before any other routing)
+
+// Health Check
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// Registration
+app.post("/api/auth/register", async (req, res) => {
+  const { username, password, email } = req.body;
+  console.log(`[API] Register attempt: ${username} (${email})`);
+  try {
+    if (!username || !password || !email) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const info = db.prepare("INSERT INTO users (username, password, email) VALUES (?, ?, ?)").run(username, hashedPassword, email);
+    console.log(`[API] User registered: ${username}`);
+    res.status(201).json({ message: "User registered successfully", userId: info.lastInsertRowid });
+  } catch (error: any) {
+    console.error("[API] Registration error:", error);
+    res.status(400).json({ error: error.message || "Registration failed" });
+  }
+});
+
+// Login
+app.post("/api/auth/login", async (req, res) => {
+  const { username, password } = req.body;
+  console.log(`[API] Login attempt: ${username}`);
+  try {
+    if (!username || !password) {
+      return res.status(400).json({ error: "Missing username or password" });
+    }
+    const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as any;
+
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET);
+    res.json({ token, username: user.username });
+  } catch (error: any) {
+    console.error("[API] Login error:", error);
+    res.status(500).json({ error: "Internal server error during login" });
+  }
+});
 
 // Auth Middleware
 const authenticateToken = (req: any, res: any, next: any) => {
@@ -91,88 +141,34 @@ const authenticateToken = (req: any, res: any, next: any) => {
   });
 };
 
-// --- API Routes ---
-const apiRouter = express.Router();
-
-// Health Check
-apiRouter.get("/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
-});
-
-// Registration
-apiRouter.post("/auth/register", async (req, res) => {
-  const { username, password, email } = req.body;
-  console.log(`Register attempt: ${username}`);
-  try {
-    if (!username || !password || !email) {
-      return res.status(400).json({ error: "Missing required fields" });
-    }
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const info = db.prepare("INSERT INTO users (username, password, email) VALUES (?, ?, ?)").run(username, hashedPassword, email);
-    res.status(201).json({ message: "User registered successfully", userId: info.lastInsertRowid });
-  } catch (error: any) {
-    console.error("Registration error:", error);
-    res.status(400).json({ error: error.message });
-  }
-});
-
-// Login
-apiRouter.post("/auth/login", async (req, res) => {
-  const { username, password } = req.body;
-  console.log(`Login attempt: ${username}`);
-  try {
-    if (!username || !password) {
-      return res.status(400).json({ error: "Missing username or password" });
-    }
-    const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as any;
-
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET);
-    res.json({ token, username: user.username });
-  } catch (error: any) {
-    console.error("Login error:", error);
-    res.status(500).json({ error: "Internal server error during login" });
-  }
-});
-
-// Get Chat History
-apiRouter.get("/chat/history", authenticateToken, (req: any, res) => {
+// Protected API Routes
+app.get("/api/chat/history", authenticateToken, (req: any, res) => {
   try {
     const history = db.prepare("SELECT * FROM chat_history WHERE user_id = ? ORDER BY timestamp ASC").all(req.user.id);
     res.json(history);
   } catch (error: any) {
-    console.error("History fetch error:", error);
+    console.error("[API] History fetch error:", error);
     res.status(500).json({ error: "Failed to fetch chat history" });
   }
 });
 
-// Prepare Chat (Save user message and get RAG context)
-apiRouter.post("/chat/prepare", authenticateToken, (req: any, res) => {
+app.post("/api/chat/prepare", authenticateToken, (req: any, res) => {
   const { message, subject } = req.body;
   const userId = req.user.id;
 
   try {
-    // 1. Save user message
     db.prepare("INSERT INTO chat_history (user_id, subject, role, content) VALUES (?, ?, ?, ?)").run(userId, subject, "user", message);
-
-    // 2. Basic RAG: Search knowledge base
     const relevantDocs = db.prepare("SELECT content FROM knowledge_base WHERE subject = ? AND (topic LIKE ? OR content LIKE ?) LIMIT 2")
       .all(subject, `%${message}%`, `%${message}%`) as { content: string }[];
-    
     const context = relevantDocs.map(doc => doc.content).join("\n");
-
     res.json({ context });
   } catch (error: any) {
-    console.error("Prepare Chat Error:", error);
+    console.error("[API] Prepare Chat Error:", error);
     res.status(500).json({ error: "Failed to prepare chat" });
   }
 });
 
-// Save AI Response
-apiRouter.post("/chat/save", authenticateToken, (req: any, res) => {
+app.post("/api/chat/save", authenticateToken, (req: any, res) => {
   const { response, subject } = req.body;
   const userId = req.user.id;
 
@@ -180,21 +176,18 @@ apiRouter.post("/chat/save", authenticateToken, (req: any, res) => {
     db.prepare("INSERT INTO chat_history (user_id, subject, role, content) VALUES (?, ?, ?, ?)").run(userId, subject, "assistant", response);
     res.json({ success: true });
   } catch (error: any) {
-    console.error("Save Chat Error:", error);
+    console.error("[API] Save Chat Error:", error);
     res.status(500).json({ error: "Failed to save chat" });
   }
 });
 
-// Mount API router
-app.use("/api", apiRouter);
-
-// Handle 404 for API routes specifically
-app.use("/api/*", (req, res) => {
+// API 404 Handler
+app.all("/api/*", (req, res) => {
+  console.log(`[API] 404 Not Found: ${req.method} ${req.url}`);
   res.status(404).json({ error: `API route not found: ${req.originalUrl}` });
 });
 
-// --- Vite Integration ---
-
+// 5. Vite / Static Integration
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -203,20 +196,16 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static(path.join(__dirname, "dist")));
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
     app.get("*", (req, res) => {
-      res.sendFile(path.join(__dirname, "dist", "index.html"));
+      res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
-    console.log("Registered API routes:");
-    apiRouter.stack.forEach((r) => {
-      if (r.route && r.route.path) {
-        console.log(`${Object.keys(r.route.methods).join(",").toUpperCase()} /api${r.route.path}`);
-      }
-    });
+    console.log("API endpoints initialized at /api/*");
   });
 }
 
