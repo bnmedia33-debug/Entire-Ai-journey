@@ -18,7 +18,12 @@ const PORT = 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "ai-tutor-secret-key";
 
 // 1. Basic Middlewares
-app.use(cors());
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 // 2. Request Logging (at the very top)

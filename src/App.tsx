@@ -3,21 +3,38 @@ import Auth from "./components/Auth";
 import Chat from "./components/Chat";
 
 export default function App() {
-  const [token, setToken] = useState<string | null>(localStorage.getItem("token"));
-  const [username, setUsername] = useState<string | null>(localStorage.getItem("username"));
+  const getSafeStorage = (key: string) => {
+    try {
+      return localStorage.getItem(key);
+    } catch (e) {
+      console.warn("localStorage access failed:", e);
+      return null;
+    }
+  };
+
+  const [token, setToken] = useState<string | null>(getSafeStorage("token"));
+  const [username, setUsername] = useState<string | null>(getSafeStorage("username"));
 
   const handleAuth = (newToken: string, newUsername: string) => {
     setToken(newToken);
     setUsername(newUsername);
-    localStorage.setItem("token", newToken);
-    localStorage.setItem("username", newUsername);
+    try {
+      localStorage.setItem("token", newToken);
+      localStorage.setItem("username", newUsername);
+    } catch (e) {
+      console.warn("localStorage set failed:", e);
+    }
   };
 
   const handleLogout = () => {
     setToken(null);
     setUsername(null);
-    localStorage.removeItem("token");
-    localStorage.removeItem("username");
+    try {
+      localStorage.removeItem("token");
+      localStorage.removeItem("username");
+    } catch (e) {
+      console.warn("localStorage remove failed:", e);
+    }
   };
 
   if (!token || !username) {
