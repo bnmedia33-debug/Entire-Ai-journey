@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { User, Lock, Mail, ArrowRight } from "lucide-react";
+import { User, Lock, Mail, ArrowRight, BookOpen } from "lucide-react";
 import { motion } from "motion/react";
 
 interface AuthProps {
