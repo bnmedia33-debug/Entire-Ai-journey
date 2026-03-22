@@ -194,12 +194,19 @@ app.all("/api/*", (req, res) => {
 
 // 5. Vite / Static Integration
 async function startServer() {
+  const server = app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://0.0.0.0:${PORT}`);
+    console.log("API endpoints initialized at /api/*");
+  });
+
   if (process.env.NODE_ENV !== "production") {
+    console.log("Initializing Vite middleware...");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
+    console.log("Vite middleware initialized");
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
@@ -207,11 +214,6 @@ async function startServer() {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
-    console.log("API endpoints initialized at /api/*");
-  });
 }
 
 startServer().catch(err => {
