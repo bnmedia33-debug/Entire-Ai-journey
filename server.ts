@@ -28,7 +28,11 @@ app.use(express.json());
 
 // 2. Request Logging (at the very top)
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - ${res.statusCode} (${duration}ms)`);
+  });
   next();
 });
 
@@ -194,20 +198,27 @@ app.all("/api/*", (req, res) => {
 
 // 5. Vite / Static Integration
 async function startServer() {
+  console.log("[Server] Starting server initialization...");
+  
   const server = app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
-    console.log("API endpoints initialized at /api/*");
+    console.log(`[Server] Listening on http://0.0.0.0:${PORT}`);
+    console.log(`[Server] Environment: ${process.env.NODE_ENV || 'development'}`);
   });
 
   if (process.env.NODE_ENV !== "production") {
-    console.log("Initializing Vite middleware...");
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-    console.log("Vite middleware initialized");
+    console.log("[Server] Initializing Vite in development mode...");
+    try {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+      console.log("[Server] Vite middleware attached successfully");
+    } catch (err) {
+      console.error("[Server] CRITICAL: Failed to initialize Vite middleware:", err);
+    }
   } else {
+    console.log("[Server] Serving static files in production mode...");
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {

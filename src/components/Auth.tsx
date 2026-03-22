@@ -17,8 +17,11 @@ export default function Auth({ onAuth }: AuthProps) {
 
   useEffect(() => {
     const checkHealth = async () => {
+      const baseUrl = window.location.origin;
+      const healthUrl = `${baseUrl}/api/health`;
+      console.log(`[Auth] Checking health at: ${healthUrl}`);
       try {
-        const res = await fetch("/api/health");
+        const res = await fetch(healthUrl);
         if (res.ok) {
           setApiStatus("up");
         } else {
@@ -36,9 +39,11 @@ export default function Auth({ onAuth }: AuthProps) {
     setError("");
     setLoading(true);
 
-    const endpoint = isLogin ? "/api/auth/login" : "/api/auth/register";
+    const baseUrl = window.location.origin;
+    const endpoint = isLogin ? `${baseUrl}/api/auth/login` : `${baseUrl}/api/auth/register`;
     const body = isLogin ? { username, password } : { username, password, email };
 
+    console.log(`[Auth] Submitting to: ${endpoint}`);
     try {
       const res = await fetch(endpoint, {
         method: "POST",

@@ -45,7 +45,8 @@ export default function Chat({ token, username, onLogout }: ChatProps) {
 
   const fetchHistory = async () => {
     try {
-      const res = await fetch("/api/chat/history", {
+      const baseUrl = window.location.origin;
+      const res = await fetch(`${baseUrl}/api/chat/history`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -74,8 +75,9 @@ export default function Chat({ token, username, onLogout }: ChatProps) {
     }]);
 
     try {
+      const baseUrl = window.location.origin;
       // 1. Prepare chat (Save user message and get RAG context)
-      const prepareRes = await fetch("/api/chat/prepare", {
+      const prepareRes = await fetch(`${baseUrl}/api/chat/prepare`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -110,7 +112,8 @@ export default function Chat({ token, username, onLogout }: ChatProps) {
       const aiResponse = response.text || "I'm sorry, I couldn't generate a response.";
 
       // 3. Save AI response to backend
-      await fetch("/api/chat/save", {
+      const baseUrl = window.location.origin;
+      await fetch(`${baseUrl}/api/chat/save`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
