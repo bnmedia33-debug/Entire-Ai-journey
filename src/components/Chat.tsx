@@ -112,7 +112,6 @@ export default function Chat({ token, username, onLogout }: ChatProps) {
       const aiResponse = response.text || "I'm sorry, I couldn't generate a response.";
 
       // 3. Save AI response to backend
-      const baseUrl = window.location.origin;
       await fetch(`${baseUrl}/api/chat/save`, {
         method: "POST",
         headers: {
