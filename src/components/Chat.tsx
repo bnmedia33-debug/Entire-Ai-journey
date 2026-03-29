@@ -33,6 +33,7 @@ export default function Chat({ user }: ChatProps) {
   const [input, setInput] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("Programming");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -52,8 +53,11 @@ export default function Chat({ user }: ChatProps) {
         ...doc.data()
       })) as Message[];
       setMessages(history);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, "chat_history");
+      setError(null);
+    }, (err) => {
+      console.error("Firestore snapshot error:", err);
+      setError("Failed to load chat history. This might be due to a missing index or permission issue.");
+      handleFirestoreError(err, OperationType.LIST, "chat_history");
     });
 
     return () => unsubscribe();
@@ -78,8 +82,13 @@ export default function Chat({ user }: ChatProps) {
     const userMessage = input;
     setInput("");
     setLoading(true);
+    setError(null);
 
     try {
+      if (!process.env.GEMINI_API_KEY) {
+        throw new Error("Gemini API Key is missing. Please check your environment variables.");
+      }
+
       // 1. Save user message to Firestore
       const timestamp = new Date().toISOString();
       await addDoc(collection(db, "chat_history"), {
@@ -139,6 +148,7 @@ export default function Chat({ user }: ChatProps) {
 
     } catch (err) {
       console.error("Failed to send message", err);
+      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
     } finally {
       setLoading(false);
     }
@@ -220,6 +230,16 @@ export default function Chat({ user }: ChatProps) {
 
         <div className="flex-1 overflow-y-auto p-10 space-y-8 scroll-smooth">
           <div className="max-w-4xl mx-auto space-y-8">
+            {error && (
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm font-medium flex items-center gap-3"
+              >
+                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                {error}
+              </motion.div>
+            )}
             <AnimatePresence initial={false}>
               {messages.length === 0 ? (
                 <motion.div 
