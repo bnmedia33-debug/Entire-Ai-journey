@@ -10,6 +10,8 @@ const handleSend = async (e: React.FormEvent) => {
   try {
     // ✅ Correct API Key from Vercel Environment Variable
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+console.log("ENV TEST:", import.meta.env);
+console.log("API KEY TEST:", apiKey);
 
     if (!apiKey) {
       throw new Error("Gemini API Key is missing");
