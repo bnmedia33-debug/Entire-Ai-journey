@@ -85,7 +85,7 @@ export default function Chat({ user }: ChatProps) {
     setError(null);
 
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = process.env.GEMINI_API_KEY || import.meta.env.GEMINI_API_KEY;
       if (!apiKey || apiKey === "undefined") {
         throw new Error("Gemini API Key is missing or invalid. Please ensure it's set in your environment variables.");
       }
