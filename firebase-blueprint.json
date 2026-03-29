@@ -1,0 +1,54 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Stores additional user information.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "username": { "type": "string", "description": "Display name" },
+        "email": { "type": "string", "description": "User email" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "username", "email"]
+    },
+    "ChatMessage": {
+      "title": "Chat Message",
+      "description": "A single message in a chat session.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "UID of the user" },
+        "subject": { "type": "string", "description": "Academic subject" },
+        "role": { "type": "string", "enum": ["user", "assistant"] },
+        "content": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "subject", "role", "content", "timestamp"]
+    },
+    "KnowledgeItem": {
+      "title": "Knowledge Base Item",
+      "description": "RAG context data.",
+      "type": "object",
+      "properties": {
+        "subject": { "type": "string" },
+        "topic": { "type": "string" },
+        "content": { "type": "string" }
+      },
+      "required": ["subject", "topic", "content"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profile documents."
+    },
+    "/chat_history/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Flat collection of chat messages."
+    },
+    "/knowledge_base/{itemId}": {
+      "schema": "KnowledgeItem",
+      "description": "Global knowledge base for RAG."
+    }
+  }
+}

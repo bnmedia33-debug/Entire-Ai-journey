@@ -1,82 +1,21 @@
-import React, { useState, useEffect } from "react";
-import { User, Lock, Mail, ArrowRight, BookOpen } from "lucide-react";
+import React, { useState } from "react";
+import { BookOpen, LogIn } from "lucide-react";
 import { motion } from "motion/react";
+import { auth, googleProvider } from "../../firebase";
+import { signInWithPopup } from "firebase/auth";
 
-interface AuthProps {
-  onAuth: (token: string, username: string) => void;
-}
-
-export default function Auth({ onAuth }: AuthProps) {
-  const [isLogin, setIsLogin] = useState(true);
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [email, setEmail] = useState("");
+export default function Auth() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [apiStatus, setApiStatus] = useState<"checking" | "up" | "down">("checking");
 
-  useEffect(() => {
-    const checkHealth = async () => {
-      const baseUrl = window.location.origin;
-      const healthUrl = `${baseUrl}/api/health`;
-      console.log(`[Auth] Checking health at: ${healthUrl}`);
-      try {
-        const res = await fetch(healthUrl);
-        if (res.ok) {
-          setApiStatus("up");
-        } else {
-          setApiStatus("down");
-        }
-      } catch (err) {
-        setApiStatus("down");
-      }
-    };
-    checkHealth();
-  }, []);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleGoogleLogin = async () => {
     setError("");
     setLoading(true);
-
-    const baseUrl = window.location.origin;
-    const endpoint = isLogin ? `${baseUrl}/api/auth/login` : `${baseUrl}/api/auth/register`;
-    const body = isLogin ? { username, password } : { username, password, email };
-
-    console.log(`[Auth] Submitting to: ${endpoint}`);
     try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      const contentType = res.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.error || "Something went wrong");
-        }
-        if (isLogin) {
-          onAuth(data.token, data.username);
-        } else {
-          setIsLogin(true);
-          setError("Registration successful! Please login.");
-        }
-      } else {
-        const text = await res.text();
-        console.error("Non-JSON response received:", text);
-        let errorMessage = `Server returned an unexpected response (Status: ${res.status}).`;
-        if (res.status === 404) {
-          errorMessage += " The requested API endpoint was not found. Please ensure the backend routes are correctly configured.";
-        }
-        if (text.length < 200) {
-          errorMessage += ` Response: ${text}`;
-        }
-        throw new Error(errorMessage);
-      }
+      await signInWithPopup(auth, googleProvider);
     } catch (err: any) {
-      setError(err.message);
+      console.error("Login error:", err);
+      setError(err.message || "Failed to sign in with Google");
     } finally {
       setLoading(false);
     }
@@ -101,108 +40,42 @@ export default function Auth({ onAuth }: AuthProps) {
 
           <div className="text-center mb-10">
             <h1 className="text-2xl font-semibold text-zinc-900 tracking-tight mb-2">
-              {isLogin ? "Welcome back" : "Create an account"}
+              AI Academic Tutor
             </h1>
             <p className="text-zinc-500 text-sm">
-              {isLogin ? "Enter your details to continue learning" : "Start your academic journey with AI"}
+              Sign in to start your academic journey with AI
             </p>
-            {apiStatus === "down" && (
-              <div className="mt-4 inline-flex items-center gap-2 px-3 py-1 bg-red-50 text-red-600 rounded-full text-[10px] font-bold uppercase tracking-wider">
-                <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
-                Backend Offline
-              </div>
-            )}
           </div>
 
           {error && (
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className={`p-4 rounded-2xl text-xs font-medium mb-8 text-center ${
-                error.includes("successful") 
-                  ? "bg-emerald-50 text-emerald-700 border border-emerald-100" 
-                  : "bg-red-50 text-red-700 border border-red-100"
-              }`}
+              className="p-4 rounded-2xl text-xs font-medium mb-8 text-center bg-red-50 text-red-700 border border-red-100"
             >
               {error}
             </motion.div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Username</label>
-              <div className="relative">
-                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                <input
-                  type="text"
-                  placeholder="johndoe"
-                  required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3.5 bg-zinc-50 border border-zinc-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm placeholder:text-zinc-300"
-                />
-              </div>
-            </div>
-
-            {!isLogin && (
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Email</label>
-                <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                  <input
-                    type="email"
-                    placeholder="john@example.com"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3.5 bg-zinc-50 border border-zinc-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm placeholder:text-zinc-300"
-                  />
-                </div>
-              </div>
+          <button
+            onClick={handleGoogleLogin}
+            disabled={loading}
+            className="w-full py-4 bg-white border border-zinc-200 text-zinc-700 font-semibold rounded-2xl hover:bg-zinc-50 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 shadow-sm"
+          >
+            {loading ? (
+              <div className="w-5 h-5 border-2 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin" />
+            ) : (
+              <>
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
+                Continue with Google
+              </>
             )}
+          </button>
 
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Password</label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                <input
-                  type="password"
-                  placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3.5 bg-zinc-50 border border-zinc-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm placeholder:text-zinc-300"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full mt-4 py-4 bg-zinc-900 text-white font-medium rounded-2xl hover:bg-zinc-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-zinc-200"
-            >
-              {loading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <>
-                  {isLogin ? "Sign in" : "Create account"}
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-          </form>
-
-          <div className="mt-10 text-center">
-            <button
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-zinc-400 hover:text-indigo-600 text-[13px] font-medium transition-colors"
-            >
-              {isLogin ? (
-                <span>New here? <span className="text-indigo-600">Create an account</span></span>
-              ) : (
-                <span>Already have an account? <span className="text-indigo-600">Sign in</span></span>
-              )}
-            </button>
+          <div className="mt-8 pt-8 border-t border-zinc-50 text-center">
+            <p className="text-[11px] text-zinc-400 font-medium uppercase tracking-widest">
+              Secure Academic Access
+            </p>
           </div>
         </div>
         

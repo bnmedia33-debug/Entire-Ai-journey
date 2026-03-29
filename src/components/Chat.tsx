@@ -3,9 +3,15 @@ import { Send, BookOpen, Code, FlaskConical, LogOut, User as UserIcon, Bot } fro
 import ReactMarkdown from "react-markdown";
 import { motion, AnimatePresence } from "motion/react";
 import { GoogleGenAI } from "@google/genai";
+import { 
+  db, auth, 
+  handleFirestoreError, OperationType, FirebaseUser 
+} from "../../firebase";
+import { signOut } from "firebase/auth";
+import { collection, query, where, orderBy, onSnapshot, addDoc, getDocs } from "firebase/firestore";
 
 interface Message {
-  id: number;
+  id: string;
   role: "user" | "assistant";
   content: string;
   subject: string;
@@ -13,9 +19,7 @@ interface Message {
 }
 
 interface ChatProps {
-  token: string;
-  username: string;
-  onLogout: () => void;
+  user: FirebaseUser;
 }
 
 const subjects = [
@@ -24,7 +28,7 @@ const subjects = [
   { id: "Science", icon: FlaskConical, color: "text-purple-600", bg: "bg-purple-50" },
 ];
 
-export default function Chat({ token, username, onLogout }: ChatProps) {
+export default function Chat({ user }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("Programming");
@@ -36,23 +40,34 @@ export default function Chat({ token, username, onLogout }: ChatProps) {
   };
 
   useEffect(() => {
-    fetchHistory();
-  }, []);
+    const q = query(
+      collection(db, "chat_history"),
+      where("userId", "==", user.uid),
+      orderBy("timestamp", "asc")
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const history = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Message[];
+      setMessages(history);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, "chat_history");
+    });
+
+    return () => unsubscribe();
+  }, [user.uid]);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  const fetchHistory = async () => {
+  const handleLogout = async () => {
     try {
-      const baseUrl = window.location.origin;
-      const res = await fetch(`${baseUrl}/api/chat/history`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      setMessages(data);
+      await signOut(auth);
     } catch (err) {
-      console.error("Failed to fetch history", err);
+      console.error("Logout error:", err);
     }
   };
 
@@ -64,31 +79,33 @@ export default function Chat({ token, username, onLogout }: ChatProps) {
     setInput("");
     setLoading(true);
 
-    // Optimistic update
-    const tempId = Date.now();
-    setMessages(prev => [...prev, { 
-      id: tempId, 
-      role: "user", 
-      content: userMessage, 
-      subject: selectedSubject,
-      timestamp: new Date().toISOString() 
-    }]);
-
     try {
-      const baseUrl = window.location.origin;
-      // 1. Prepare chat (Save user message and get RAG context)
-      const prepareRes = await fetch(`${baseUrl}/api/chat/prepare`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ message: userMessage, subject: selectedSubject }),
+      // 1. Save user message to Firestore
+      const timestamp = new Date().toISOString();
+      await addDoc(collection(db, "chat_history"), {
+        userId: user.uid,
+        subject: selectedSubject,
+        role: "user",
+        content: userMessage,
+        timestamp
       });
 
-      const { context } = await prepareRes.json();
+      // 2. Simple RAG: Fetch relevant context from knowledge_base
+      // Note: Firestore doesn't support full-text search natively without extensions,
+      // so we'll do a simple subject filter and manual keyword check for this demo.
+      const kbQuery = query(collection(db, "knowledge_base"), where("subject", "==", selectedSubject));
+      const kbSnapshot = await getDocs(kbQuery);
+      const relevantDocs = kbSnapshot.docs
+        .map(doc => doc.data())
+        .filter(doc => 
+          doc.content.toLowerCase().includes(userMessage.toLowerCase()) || 
+          doc.topic?.toLowerCase().includes(userMessage.toLowerCase())
+        )
+        .slice(0, 2);
+      
+      const context = relevantDocs.map(doc => doc.content).join("\n");
 
-      // 2. Call Gemini API from Frontend
+      // 3. Call Gemini API
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
@@ -111,23 +128,15 @@ export default function Chat({ token, username, onLogout }: ChatProps) {
 
       const aiResponse = response.text || "I'm sorry, I couldn't generate a response.";
 
-      // 3. Save AI response to backend
-      await fetch(`${baseUrl}/api/chat/save`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ response: aiResponse, subject: selectedSubject }),
+      // 4. Save AI response to Firestore
+      await addDoc(collection(db, "chat_history"), {
+        userId: user.uid,
+        subject: selectedSubject,
+        role: "assistant",
+        content: aiResponse,
+        timestamp: new Date().toISOString()
       });
 
-      setMessages(prev => [...prev, { 
-        id: tempId + 1, 
-        role: "assistant", 
-        content: aiResponse, 
-        subject: selectedSubject,
-        timestamp: new Date().toISOString() 
-      }]);
     } catch (err) {
       console.error("Failed to send message", err);
     } finally {
@@ -177,13 +186,13 @@ export default function Chat({ token, username, onLogout }: ChatProps) {
                 <UserIcon className="w-5 h-5" />
               </div>
               <div className="flex-1 overflow-hidden">
-                <p className="text-sm font-bold text-zinc-900 truncate">{username}</p>
+                <p className="text-sm font-bold text-zinc-900 truncate">{user.displayName || user.email}</p>
                 <p className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider">Student</p>
               </div>
             </div>
           </div>
           <button
-            onClick={onLogout}
+            onClick={handleLogout}
             className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-red-500 hover:bg-red-50 rounded-xl transition-all"
           >
             <LogOut className="w-4 h-4" />
