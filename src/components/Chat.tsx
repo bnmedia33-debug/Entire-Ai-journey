@@ -85,8 +85,9 @@ export default function Chat({ user }: ChatProps) {
     setError(null);
 
     try {
-      if (!process.env.GEMINI_API_KEY) {
-        throw new Error("Gemini API Key is missing. Please check your environment variables.");
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey || apiKey === "undefined") {
+        throw new Error("Gemini API Key is missing or invalid. Please ensure it's set in your environment variables.");
       }
 
       // 1. Save user message to Firestore
